@@ -1,0 +1,5 @@
+node_modules/
+*.sarif
+*.log
+.DS_Store
+coverage/

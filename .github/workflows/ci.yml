@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }} · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm test
+      - name: Smoke test CLI
+        shell: bash
+        run: |
+          node bin/mcp-warden.js --version
+          node bin/mcp-warden.js scan examples/safe --no-discover
+          node bin/mcp-warden.js scan examples/vulnerable --no-discover --fail-on none
+          node bin/mcp-warden.js tools examples/tools/poisoned-tools.json --fail-on none
+
+  action:
+    name: GitHub Action
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan the safe example with the local action
+        uses: ./
+        with:
+          path: examples/safe
+          sarif: 'false'

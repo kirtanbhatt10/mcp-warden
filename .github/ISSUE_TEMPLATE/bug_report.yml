@@ -1,0 +1,21 @@
+name: Bug report
+description: Something crashed, or a finding is wrong (false positive / false negative)
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Include the command you ran and the output. **Redact any secrets.**
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Minimal config that reproduces it
+      render: json
+  - type: input
+    id: version
+    attributes:
+      label: mcp-warden version / Node version / OS
+      placeholder: 1.0.0 / 22.x / macOS 15
