@@ -4,22 +4,45 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  lint:
+    name: Lint & hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: npm run lint
+      - name: Package contents
+        run: npm pack --dry-run --json | node -e "const [p]=JSON.parse(require('fs').readFileSync(0,'utf8'));const bad=p.files.filter(f=>!/^(bin|src)\/|^(README.md|LICENSE|package.json)$/.test(f.path));if(bad.length){console.error('unexpected files in package:',bad.map(f=>f.path));process.exit(1)}console.log(p.files.length+' files, '+p.unpackedSize+' bytes')"
+
   test:
     name: Node ${{ matrix.node }} · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         node: [20, 22, 24]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node }}
       - run: npm test
@@ -32,14 +55,30 @@ jobs:
           node bin/mcp-warden.js tools examples/tools/poisoned-tools.json --fail-on none
           node bin/mcp-warden.js inspect --fail-on none --env DEMO_MODE=poisoned -- node examples/servers/demo-server.js
 
+  coverage:
+    name: Coverage gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: npm run coverage
+
   action:
     name: GitHub Action
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Scan the safe example with the local action
         uses: ./
         with:

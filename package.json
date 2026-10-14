@@ -18,6 +18,8 @@
   ],
   "scripts": {
     "test": "node --test",
+    "lint": "node scripts/check-source.js",
+    "coverage": "node --test --experimental-test-coverage --test-coverage-exclude=\"test/**\" --test-coverage-exclude=\"examples/**\" --test-coverage-exclude=\"scripts/**\" --test-coverage-lines=90 --test-coverage-branches=75 --test-coverage-functions=85",
     "scan": "node bin/mcp-warden.js",
     "demo": "node bin/mcp-warden.js scan examples/vulnerable"
   },
