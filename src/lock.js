@@ -4,6 +4,7 @@
  */
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import { writeFileAtomic } from './fsutil.js';
 
 export function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -20,12 +21,29 @@ export function hashTool(tool) {
   return crypto.createHash('sha256').update(canonical(relevant)).digest('hex');
 }
 
+/**
+ * Read a lock file. Returns null when it does not exist yet. A lock file that
+ * exists but is unreadable or corrupt is an error: silently replacing it would
+ * disable rug-pull detection.
+ */
 export function readLock(file) {
+  let text;
   try {
-    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (data && typeof data === 'object' && data.servers) return data;
-  } catch { /* missing or invalid */ }
-  return null;
+    text = fs.readFileSync(file, 'utf8');
+  } catch (e) {
+    if (e.code === 'ENOENT') return null;
+    throw new Error(`cannot read lock file ${file}: ${e.code || e.message}`);
+  }
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`lock file ${file} is not valid JSON; refusing to overwrite it (delete it to start over)`);
+  }
+  if (!data || typeof data !== 'object' || !data.servers || typeof data.servers !== 'object') {
+    throw new Error(`lock file ${file} has an unexpected format; refusing to overwrite it`);
+  }
+  return data;
 }
 
 /**
@@ -52,7 +70,7 @@ export function checkLock(entries, lockFile, { update = false, source = lockFile
       const tools = merged[k].tools || {};
       out.servers[k] = { tools: Object.fromEntries(Object.keys(tools).sort().map((t) => [t, tools[t]])) };
     }
-    fs.writeFileSync(lockFile, `${JSON.stringify(out, null, 2)}\n`);
+    writeFileAtomic(lockFile, `${JSON.stringify(out, null, 2)}\n`);
   };
 
   if (!lock) {

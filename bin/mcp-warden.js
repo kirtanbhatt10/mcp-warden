@@ -6,6 +6,7 @@ import {
   expandPaths, discover, loadConfigFile,
 } from '../src/index.js';
 import { safeMultiline } from '../src/sanitize.js';
+import { writeFileAtomic } from '../src/fsutil.js';
 import { knownLocations } from '../src/discover.js';
 import { format, displayPath } from '../src/report.js';
 
@@ -47,6 +48,7 @@ Tool scanning / inspect
       --inherit-env        Pass your whole environment to launched servers (default: minimal env)
   -y, --yes                Confirm launching stdio servers taken from your configs
 
+      --debug              Print stack traces for unexpected errors
   -h, --help               Show help
       --version            Print version
 
@@ -110,6 +112,7 @@ function parseArgs(argv) {
       case '--color': opts.color = true; break;
       case '-h': case '--help': opts.help = true; break;
       case '--version': case '-V': opts.version = true; break;
+      case '--debug': opts.debug = true; break;
       default:
         if (a.startsWith('-') && a !== '-') throw new UsageError(`unknown option ${a}`);
         opts._.push(a);
@@ -129,13 +132,14 @@ function applySettings(opts) {
   if (!['text', 'json', 'sarif', 'markdown', 'md'].includes(opts.format)) throw new UsageError(`unknown format "${opts.format}"`);
   if (!SEVERITIES.includes(opts.minSeverity)) throw new UsageError(`unknown severity "${opts.minSeverity}"`);
   if (opts.failOn !== 'none' && !SEVERITIES.includes(opts.failOn)) throw new UsageError(`unknown severity "${opts.failOn}"`);
-  if (opts.timeout !== undefined && !(opts.timeout > 0)) throw new UsageError('--timeout must be a positive number of milliseconds');
+  if (opts.timeout !== undefined && !(opts.timeout > 0 && opts.timeout <= 3600000)) throw new UsageError('--timeout must be between 1 and 3600000 milliseconds');
+  if (opts.updateLock && !opts.lock) throw new UsageError('--update-lock requires --lock <file>');
 }
 
 function emit(text, opts) {
   const out = text.endsWith('\n') ? text : `${text}\n`;
   if (opts.output) {
-    fs.writeFileSync(opts.output, out);
+    writeFileAtomic(opts.output, out);
     process.stderr.write(`mcp-warden: report written to ${opts.output}\n`);
   } else {
     process.stdout.write(out);
@@ -186,7 +190,7 @@ async function runInspect(opts) {
   }
   if (!Object.keys(data).length) throw new Error('could not inspect any server');
   if (opts.save) {
-    fs.writeFileSync(opts.save, `${JSON.stringify(data, null, 2)}\n`);
+    writeFileAtomic(opts.save, `${JSON.stringify(data, null, 2)}\n`);
     note(`tools saved to ${opts.save}`);
   }
   const report = auditToolData(data, { ignore: opts.ignore, source: opts.save || 'live inspection', lock: opts.lock, updateLock: opts.updateLock });
@@ -252,8 +256,8 @@ async function main(argv) {
       }
     }
   } catch (e) {
-    if (e instanceof UsageError) process.stderr.write(`mcp-warden: ${e.message}\n`);
-    else process.stderr.write(`mcp-warden: ${e.message}\n`);
+    note(e.message);
+    if (opts.debug && !(e instanceof UsageError)) process.stderr.write(`${e.stack}\n`);
     return 2;
   }
 
@@ -270,4 +274,20 @@ async function main(argv) {
   return report.findings.some((f) => severityRank(f.severity) >= threshold) ? 1 : 0;
 }
 
-main(process.argv.slice(2)).then((code) => { process.exitCode = code; });
+// Piping into `head` & co. closes stdout early: exit quietly instead of crashing.
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on('error', (e) => {
+    if (e.code === 'EPIPE') process.exit(process.exitCode ?? 0);
+    throw e;
+  });
+}
+
+main(process.argv.slice(2)).then(
+  (code) => { process.exitCode = code; },
+  (e) => {
+    process.stderr.write(`mcp-warden: internal error: ${safeMultiline(e?.message || e)}\n`);
+    if (process.argv.includes('--debug') || process.env.MCP_WARDEN_DEBUG) process.stderr.write(`${e?.stack}\n`);
+    else process.stderr.write('Re-run with --debug for a stack trace and please report it: https://github.com/kirtanbhatt10/mcp-warden/issues\n');
+    process.exitCode = 2;
+  },
+);

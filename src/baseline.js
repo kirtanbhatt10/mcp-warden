@@ -5,17 +5,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { writeFileAtomic } from './fsutil.js';
 
 export function fingerprint(f, cwd = process.cwd()) {
   const rel = f.file && !f.file.startsWith('<') ? path.relative(cwd, f.file).split(path.sep).join('/') : f.file || '';
-  return crypto.createHash('sha256').update([f.ruleId, rel, f.server || '', f.pointer || '', f.message || ''].join('\u0000')).digest('hex').slice(0, 16);
+  // message text is deliberately excluded (it can contain line numbers); evidence identifies the value
+  return crypto.createHash('sha256').update([f.ruleId, rel, f.server || '', f.pointer || '', f.evidence || ''].join('\u0000')).digest('hex').slice(0, 16);
 }
 
 export function writeBaseline(file, findings, cwd = process.cwd()) {
   const entries = findings
     .map((f) => ({ id: fingerprint(f, cwd), rule: f.ruleId, server: f.server || null, message: f.message }))
     .sort((a, b) => a.id.localeCompare(b.id));
-  fs.writeFileSync(file, `${JSON.stringify({ version: 1, generator: 'mcp-warden', findings: entries }, null, 2)}\n`);
+  writeFileAtomic(file, `${JSON.stringify({ version: 1, generator: 'mcp-warden', findings: entries }, null, 2)}\n`);
   return entries.length;
 }
 
