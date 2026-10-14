@@ -30,7 +30,7 @@ jobs:
           node bin/mcp-warden.js scan examples/safe --no-discover
           node bin/mcp-warden.js scan examples/vulnerable --no-discover --fail-on none
           node bin/mcp-warden.js tools examples/tools/poisoned-tools.json --fail-on none
-          DEMO_MODE=poisoned node bin/mcp-warden.js inspect --fail-on none -- node examples/servers/demo-server.js
+          node bin/mcp-warden.js inspect --fail-on none --env DEMO_MODE=poisoned -- node examples/servers/demo-server.js
 
   action:
     name: GitHub Action

@@ -24,7 +24,7 @@ describe('live inspection (stdio)', () => {
   });
 
   test('poisoned server is detected end-to-end via the CLI', () => {
-    const r = cli(['inspect', '-f', 'json', '--', process.execPath, demo], { env: { DEMO_MODE: 'poisoned' } });
+    const r = cli(['inspect', '-f', 'json', '--env', 'DEMO_MODE=poisoned', '--', process.execPath, demo]);
     assert.equal(r.status, 1);
     const report = JSON.parse(r.stdout);
     const ids = new Set(report.findings.map((f) => f.ruleId));
@@ -94,7 +94,7 @@ describe('rug-pull lock', () => {
     const lock = path.join(dir, 'mcp-tools.lock.json');
     assert.equal(cli(['inspect', '--lock', lock, '--', process.execPath, demo]).status, 0);
     assert.ok(fs.existsSync(lock));
-    const r = cli(['inspect', '--lock', lock, '-f', 'json', '--', process.execPath, demo], { env: { DEMO_MODE: 'rugpull' } });
+    const r = cli(['inspect', '--lock', lock, '-f', 'json', '-e', 'DEMO_MODE=rugpull', '--', process.execPath, demo]);
     assert.equal(r.status, 1);
     assert.ok(JSON.parse(r.stdout).findings.some((f) => f.ruleId === 'TP011'));
   });
@@ -190,5 +190,76 @@ describe('baseline and settings', () => {
     const dir = tmpdir();
     fs.writeFileSync(path.join(dir, '.mcp-warden.json'), '{ nope');
     assert.equal(cli(['scan', '--no-discover'], { cwd: dir }).status, 2);
+  });
+});
+
+describe('inspect sandboxing', () => {
+  const envDump = path.join(tmpdir(), 'env-dump-server.js');
+  fs.writeFileSync(envDump, `let b='';process.stdin.on('data',d=>{b+=d;let i;while((i=b.indexOf('\\n'))>=0){const m=JSON.parse(b.slice(0,i));b=b.slice(i+1);
+if(m.method==='initialize')console.log(JSON.stringify({jsonrpc:'2.0',id:m.id,result:{protocolVersion:'2025-06-18',capabilities:{},serverInfo:{name:'env'}}}));
+if(m.method==='tools/list')console.log(JSON.stringify({jsonrpc:'2.0',id:m.id,result:{tools:[{name:'env',description:JSON.stringify({secret:process.env.MW_TEST_SECRET||null,given:process.env.MW_GIVEN||null,path:!!process.env.PATH})}]}}));}});`);
+
+  test('launched servers do not inherit secrets from the parent environment', async () => {
+    process.env.MW_TEST_SECRET = 'hunter2';
+    try {
+      const res = await inspectStdio(process.execPath, [envDump], { env: { MW_GIVEN: 'yes' } });
+      const seen = JSON.parse(res.tools[0].description);
+      assert.equal(seen.secret, null);
+      assert.equal(seen.given, 'yes');
+      assert.equal(seen.path, true);
+      const inherited = await inspectStdio(process.execPath, [envDump], { inheritEnv: true });
+      assert.equal(JSON.parse(inherited.tools[0].description).secret, 'hunter2');
+    } finally {
+      delete process.env.MW_TEST_SECRET;
+    }
+  });
+
+  test('servers that exit immediately are reported, not crashed on', async () => {
+    await assert.rejects(inspectStdio(process.execPath, ['-e', 'process.exit(3)']), /exited early/);
+  });
+
+  test('oversized output without newlines is rejected', async () => {
+    const { LIMITS } = await import('../src/inspect.js');
+    const old = LIMITS.maxMessageBytes;
+    LIMITS.maxMessageBytes = 256 * 1024;
+    try {
+      await assert.rejects(
+        inspectStdio(process.execPath, ['-e', "const s='x'.repeat(1<<16);setInterval(()=>process.stdout.write(s),1)"], { timeoutMs: 20000 }),
+        /without a newline/,
+      );
+    } finally {
+      LIMITS.maxMessageBytes = old;
+    }
+  });
+
+  test('HTTP inspect refuses non-http schemes and URL credentials', async () => {
+    await assert.rejects(inspectHttp('file:///etc/passwd'), /unsupported URL scheme/);
+    await assert.rejects(inspectHttp('https://user:pw@example.com/mcp'), /credentials in the URL/);
+  });
+
+  test('HTTP inspect does not follow redirects', async () => {
+    const http = await import('node:http');
+    const srv = http.createServer((req, res) => { res.writeHead(307, { location: 'http://127.0.0.1:1/elsewhere' }); res.end(); });
+    await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+    try {
+      await assert.rejects(inspectHttp(`http://127.0.0.1:${srv.address().port}/mcp`, { headers: { Authorization: 'Bearer x' } }), /redirect/);
+    } finally {
+      srv.close();
+    }
+  });
+
+  test('HTTP inspect caps response size', async () => {
+    const http = await import('node:http');
+    const { LIMITS } = await import('../src/inspect.js');
+    const old = LIMITS.maxMessageBytes;
+    LIMITS.maxMessageBytes = 1024;
+    const srv = http.createServer((req, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"x":"' + 'a'.repeat(5000) + '"}'); });
+    await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+    try {
+      await assert.rejects(inspectHttp(`http://127.0.0.1:${srv.address().port}/mcp`), /larger than/);
+    } finally {
+      LIMITS.maxMessageBytes = old;
+      srv.close();
+    }
   });
 });

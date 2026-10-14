@@ -43,6 +43,8 @@ Tool scanning / inspect
       --save <file>        Save the fetched tools/list JSON (inspect)
   -H, --header <h>         Extra HTTP header for --url, e.g. -H "Authorization: Bearer $TOKEN"
       --timeout <ms>       Inspect timeout per server (default 30000)
+  -e, --env KEY=VALUE      Environment variable for launched servers (repeatable)
+      --inherit-env        Pass your whole environment to launched servers (default: minimal env)
   -y, --yes                Confirm launching stdio servers taken from your configs
 
   -h, --help               Show help
@@ -58,7 +60,7 @@ Examples
 class UsageError extends Error {}
 
 function parseArgs(argv) {
-  const opts = { _: [], cmdline: null, format: undefined, minSeverity: undefined, failOn: undefined, ignore: [], headers: {}, discover: undefined, verbose: false, color: undefined };
+  const opts = { _: [], cmdline: null, env: {}, format: undefined, minSeverity: undefined, failOn: undefined, ignore: [], headers: {}, discover: undefined, verbose: false, color: undefined };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--') { opts.cmdline = argv.slice(i + 1); break; }
@@ -94,6 +96,14 @@ function parseArgs(argv) {
         break;
       }
       case '--timeout': opts.timeout = Number(val()); break;
+      case '-e': case '--env': {
+        const kv = val();
+        const idx = kv.indexOf('=');
+        if (idx < 1) throw new UsageError(`invalid --env "${kv}" (expected KEY=VALUE)`);
+        opts.env[kv.slice(0, idx)] = kv.slice(idx + 1);
+        break;
+      }
+      case '--inherit-env': opts.inheritEnv = true; break;
       case '-y': case '--yes': opts.yes = true; break;
       case '-v': case '--verbose': opts.verbose = true; break;
       case '--no-color': opts.color = false; break;
@@ -138,7 +148,7 @@ const note = (msg) => process.stderr.write(`mcp-warden: ${safeMultiline(msg)}\n`
 function inspectTargets(opts) {
   if (opts.cmdline) {
     if (!opts.cmdline.length) throw new UsageError('nothing after "--" (expected a server command)');
-    return [{ name: opts._[0] || opts.cmdline.slice(0, 3).join(' '), command: opts.cmdline[0], args: opts.cmdline.slice(1), env: {}, explicit: true }];
+    return [{ name: opts._[0] || opts.cmdline.slice(0, 3).join(' '), command: opts.cmdline[0], args: opts.cmdline.slice(1), env: { ...opts.env }, explicit: true }];
   }
   if (opts.url) return [{ name: new URL(opts.url).host, url: opts.url, headers: opts.headers }];
   if (opts.server || opts.all) {
@@ -150,7 +160,7 @@ function inspectTargets(opts) {
     if (stdio.length && !opts.yes) {
       throw new UsageError(`inspect will launch ${stdio.length} local server process${stdio.length > 1 ? 'es' : ''} (${stdio.map((s) => s.name).join(', ')}).\nRun "mcp-warden scan" first, then re-run with --yes to confirm.`);
     }
-    return chosen.map((s) => ({ name: s.name, command: s.command, args: s.args, env: s.env, url: s.url, headers: { ...s.headers, ...opts.headers } }));
+    return chosen.map((s) => ({ name: s.name, command: s.command, args: s.args, env: { ...s.env, ...opts.env }, url: s.url, headers: { ...s.headers, ...opts.headers } }));
   }
   throw new UsageError('inspect needs a target: -- <command>, --url <url>, --server <name> or --all');
 }
@@ -163,7 +173,7 @@ async function runInspect(opts) {
     note(`inspecting ${t.name} …`);
     try {
       const res = t.command
-        ? await inspectStdio(t.command, t.args, { env: t.env, timeoutMs: opts.timeout || 30000 })
+        ? await inspectStdio(t.command, t.args, { env: t.env, timeoutMs: opts.timeout || 30000, inheritEnv: opts.inheritEnv })
         : await inspectHttp(t.url, { headers: t.headers, timeoutMs: opts.timeout || 30000 });
       const label = res.serverInfo?.name ? `${res.serverInfo.name}${res.serverInfo.version ? `@${res.serverInfo.version}` : ''}` : 'unknown server';
       note(`  ${label} exposed ${res.tools.length} tool${res.tools.length === 1 ? '' : 's'}`);

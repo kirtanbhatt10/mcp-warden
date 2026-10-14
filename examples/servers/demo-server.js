@@ -3,9 +3,9 @@
  * A tiny, dependency-free MCP server used for mcp-warden's tests and demos.
  * It speaks newline-delimited JSON-RPC over stdio, or Streamable HTTP with --http <port>.
  *
- *   node examples/servers/demo-server.js                 # benign tools
- *   DEMO_MODE=poisoned node examples/servers/demo-server.js   # tool-poisoning attack
- *   DEMO_MODE=rugpull  node examples/servers/demo-server.js   # same tools, silently changed description
+ *   mcp-warden inspect -- node examples/servers/demo-server.js                          # benign tools
+ *   mcp-warden inspect --env DEMO_MODE=poisoned -- node examples/servers/demo-server.js # tool-poisoning attack
+ *   mcp-warden inspect --env DEMO_MODE=rugpull  -- node examples/servers/demo-server.js # silently changed description
  *
  * It never does anything harmful: the "attacks" only live in tool descriptions.
  */

@@ -76,7 +76,7 @@ git clone https://github.com/kirtanbhatt10/mcp-warden && cd mcp-warden
 node bin/mcp-warden.js scan examples/vulnerable        # 28 findings, grade F
 node bin/mcp-warden.js scan examples/safe              # clean, grade A
 node bin/mcp-warden.js tools examples/tools/poisoned-tools.json
-DEMO_MODE=poisoned node bin/mcp-warden.js inspect -- node examples/servers/demo-server.js
+node bin/mcp-warden.js inspect --env DEMO_MODE=poisoned -- node examples/servers/demo-server.js
 ```
 
 ## 🎬 Demos
