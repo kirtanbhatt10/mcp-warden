@@ -42,7 +42,11 @@ export function isPlaceholder(value) {
   if (/^%[A-Za-z_][A-Za-z0-9_]*%$/.test(v)) return true; // %VAR%
   if (/^\{\{.*\}\}$/.test(v)) return true; // {{ secret }}
   if (/^<.*>$/.test(v) || /^\[.*\]$/.test(v)) return true;
-  if (/your|xxxx|changeme|change_me|example|placeholder|replace|dummy|redacted|insert|todo|fixme|\*{3,}|\.\.\./i.test(v)) return true;
+  // placeholder words only count as whole words (so random tokens that happen
+  // to contain "todo" or "your" are still detected as secrets)
+  if (/(^|[^a-z0-9])(your|my|xxx+|changeme|change_me|example|placeholder|replace(_?me)?|dummy|redacted|insert|todo|fixme|secret_here|key_here|token_here|here)([^a-z0-9]|$)/i.test(v)) return true;
+  if (/^(your|my)[_-]?(api[_-]?)?(key|token|secret|password)/i.test(v)) return true;
+  if (/\*{3,}|\.\.\./.test(v)) return true;
   if (/^(.)\1+$/.test(v)) return true;
   if (/^(true|false|null|none|yes|no|\d+)$/i.test(v)) return true;
   return false;

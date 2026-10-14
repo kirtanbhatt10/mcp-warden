@@ -125,7 +125,7 @@ https://github.com/user-attachments/assets/a005b44e-fac9-4f09-9568-569b4ee93993
 | MW015 | `untrusted-registry` | medium | Custom or plain-HTTP npm / PyPI indexes |
 | MW016 | `remote-without-auth` | info | Remote servers without static credentials (verify the URL) |
 | MW017 | `config-permissions` | medium | Config files containing secrets that are group/world readable |
-| MW018 | `duplicate-server-name` | low | Ambiguous duplicate server names (shadowing) |
+| MW018 | `duplicate-key-shadowing` | high | A server name or field (`command`, `args`…) defined twice. JSON keeps the *last* one, so reviewers and clients see different servers |
 | MW019 | `known-vulnerable-package` | critical | Known-malicious packages and vulnerable versions (CVE-2025-6514, CVE-2025-49596, `postmark-mcp`, …) |
 
 ### Tool-poisoning rules (`mcp-warden tools`)

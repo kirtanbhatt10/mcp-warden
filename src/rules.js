@@ -497,17 +497,36 @@ export const FILE_RULES = [
   },
   {
     id: 'MW018',
-    name: 'duplicate-server-name',
-    severity: 'low',
-    title: 'Same server name defined more than once',
-    description: 'Duplicate names make it ambiguous which definition (and which tools) the client actually loads, a known vector for tool shadowing.',
-    fix: 'Give every server a unique name.',
-    check({ servers }) {
-      const counts = new Map();
-      for (const s of servers) counts.set(s.name, (counts.get(s.name) || 0) + 1);
-      return [...counts].filter(([, c]) => c > 1).map(([k, c]) => ({ message: `"${k}" is defined ${c} times in this file`, evidence: k, pointer: '' }));
+    name: 'duplicate-key-shadowing',
+    severity: 'high',
+    title: 'Duplicate key hides a different server definition',
+    description: 'JSON parsers keep the LAST value of a duplicated key. A config can show reviewers a harmless server (or "command") near the top while the client actually loads a different one defined later under the same name.',
+    fix: 'Remove the duplicate so every server name and field appears exactly once, and check which definition your client was actually running.',
+    check({ duplicates = [] }) {
+      const out = [];
+      for (const d of duplicates) {
+        const p = d.path;
+        const containerLen = containerLength(p);
+        if (containerLen === -1) continue;
+        if (p.length === containerLen) {
+          out.push({ message: `Server "${d.key}" is defined more than once (lines ${d.firstLine} and ${d.line}); clients load the last definition`, evidence: d.key, pointer: `/${[...p, d.key].join('/')}`, line: d.line });
+        } else {
+          const server = p[containerLen];
+          const field = [...p.slice(containerLen + 1), d.key].join('.');
+          out.push({ message: `"${field}" is set more than once in server "${server}" (lines ${d.firstLine} and ${d.line}); the last value wins`, evidence: field, pointer: `/${[...p, d.key].join('/')}`, line: d.line, server });
+        }
+      }
+      return out;
     },
   },
 ];
 
 export const ALL_RULES = [...SERVER_RULES, ...FILE_RULES];
+
+/** Length of the server-container prefix of a JSON path, or -1 when the path is not inside one. */
+function containerLength(p) {
+  if (p[0] === 'mcpServers' || p[0] === 'servers' || p[0] === 'context_servers' || p[0] === 'mcp_servers') return 1;
+  if (p[0] === 'mcp' && p[1] === 'servers') return 2;
+  if (p[0] === 'projects' && p.length >= 3 && p[2] === 'mcpServers') return 3;
+  return -1;
+}

@@ -90,7 +90,10 @@ class Parser {
       this.skipWs();
       const value = this.parseValue();
       const target = this.walk(this.current, path.slice(0, -1));
-      target[path[path.length - 1]] = value;
+      const last = path[path.length - 1];
+      if (last === '__proto__' || last === 'constructor' || last === 'prototype') this.err(`forbidden key "${last}"`);
+      if (Object.prototype.hasOwnProperty.call(target, last)) this.err(`duplicate key "${path.join('.')}"`);
+      target[last] = value;
       this.expectEol();
     }
     return this.root;
@@ -99,6 +102,7 @@ class Parser {
   walk(obj, path) {
     let cur = obj;
     for (const k of path) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') this.err(`forbidden key "${k}"`);
       if (Array.isArray(cur[k])) cur = cur[k][cur[k].length - 1];
       else {
         if (cur[k] === undefined || typeof cur[k] !== 'object') cur[k] = {};
@@ -268,7 +272,11 @@ class Parser {
       this.i++;
       this.skipWs();
       const v = this.parseValue();
-      this.walk(obj, path.slice(0, -1))[path[path.length - 1]] = v;
+      const t = this.walk(obj, path.slice(0, -1));
+      const last = path[path.length - 1];
+      if (last === '__proto__' || last === 'constructor' || last === 'prototype') this.err(`forbidden key "${last}"`);
+      if (Object.prototype.hasOwnProperty.call(t, last)) this.err(`duplicate key "${path.join('.')}"`);
+      t[last] = v;
       this.skipWs();
       if (this.peek() === ',') { this.i++; continue; }
       if (this.peek() === '}') { this.i++; return obj; }

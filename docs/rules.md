@@ -189,13 +189,13 @@ The file holds credentials but is group- or world-readable.
 
 ### MW018
 
-**`duplicate-server-name`** · default severity: **low**
+**`duplicate-key-shadowing`** · default severity: **high**
 
-Same server name defined more than once.
+Duplicate key hides a different server definition.
 
-Duplicate names make it ambiguous which definition (and which tools) the client actually loads, a known vector for tool shadowing.
+JSON parsers keep the LAST value of a duplicated key. A config can show reviewers a harmless server (or "command") near the top while the client actually loads a different one defined later under the same name.
 
-**How to fix:** Give every server a unique name.
+**How to fix:** Remove the duplicate so every server name and field appears exactly once, and check which definition your client was actually running.
 
 ## Tool-poisoning rules
 
@@ -227,9 +227,9 @@ Tool description references credential or config files.
 
 **`invisible-characters`** · default severity: **high**
 
-Tool metadata contains invisible or bidirectional Unicode.
+Tool metadata contains invisible, control or bidirectional characters.
 
-**How to fix:** Invisible characters can carry instructions humans cannot see in the UI. Strip them or remove the server.
+**How to fix:** Invisible characters and terminal escape sequences can carry instructions humans cannot see, or rewrite what your terminal shows. Strip them or remove the server.
 
 ### TP005
 

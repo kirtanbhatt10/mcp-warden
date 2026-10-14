@@ -4,6 +4,9 @@
  */
 import { detectSecret, redact } from './secrets.js';
 
+/** Only the first MiB of any single field is pattern-matched (bounded work on hostile input). */
+const MAX_SCAN_CHARS = 1024 * 1024;
+
 export const TOOL_RULES = [
   {
     id: 'TP001',
@@ -88,9 +91,9 @@ export const TOOL_RULES = [
     severity: 'low',
     title: 'Unusually long tool description',
     fix: 'Very long descriptions consume context and are often used to bury instructions. Review the full text.',
-    test(text, where) {
+    test(text, where, fullLength = text.length) {
       if (where !== 'description') return null;
-      return text.length > 1500 ? `${text.length} characters` : null;
+      return fullLength > 1500 ? `${fullLength} characters` : null;
     },
   },
   {
@@ -177,7 +180,7 @@ export function scanTools(data, file = '<stdin>') {
         if (seen.has(rule.id)) continue;
         // parameter names are only checked for invisible chars and suspicious names
         if (t.isKey && !['TP004', 'TP003'].includes(rule.id)) continue;
-        const ev = rule.test(t.text, t.where);
+        const ev = rule.test(t.text.length > MAX_SCAN_CHARS ? t.text.slice(0, MAX_SCAN_CHARS) : t.text, t.where, t.text.length);
         if (!ev) continue;
         seen.add(rule.id);
         findings.push({

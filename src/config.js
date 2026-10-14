@@ -18,6 +18,9 @@ import { parseToml } from './parsers/toml.js';
  * @property {object} raw           The original server object
  */
 
+/** Config files larger than this are skipped (~/.claude.json can grow large, but not this large). */
+export const MAX_CONFIG_BYTES = 64 * 1024 * 1024;
+
 /**
  * Read and parse a config file and return its MCP servers.
  * @returns {{servers: McpServer[], text: string, error?: string, client?: string}}
@@ -25,6 +28,10 @@ import { parseToml } from './parsers/toml.js';
 export function loadConfigFile(file) {
   let text;
   try {
+    const size = fs.statSync(file).size;
+    if (size > MAX_CONFIG_BYTES) {
+      return { servers: [], text: '', error: `skipped: file is ${(size / 1048576).toFixed(1)} MB (limit ${MAX_CONFIG_BYTES / 1048576} MB)` };
+    }
     text = fs.readFileSync(file, 'utf8');
   } catch (e) {
     return { servers: [], text: '', error: `cannot read: ${e.code || e.message}` };

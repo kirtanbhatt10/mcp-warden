@@ -7,6 +7,7 @@ import { checkLock, LOCK_RULES } from './lock.js';
 
 const ALL_TOOL_RULES = [...BASE_TOOL_RULES, ...LOCK_RULES];
 import { parseJsonc } from './parsers/jsonc.js';
+import { findDuplicateKeys } from './parsers/duplicates.js';
 
 export { SEVERITIES, severityRank, ALL_RULES, ALL_TOOL_RULES, scanTools, discover, expandPaths, loadConfigFile };
 export { extractServers, normalizeServer } from './config.js';
@@ -80,9 +81,13 @@ export function audit(opts = {}) {
     let stat = null;
     try { stat = fs.statSync(t.file); } catch { /* ignore */ }
     const fileFindings = auditServers(servers, { ignore });
+    let duplicates = [];
+    if (text && !t.file.toLowerCase().endsWith('.toml')) {
+      try { duplicates = findDuplicateKeys(text); } catch { duplicates = []; }
+    }
     for (const rule of FILE_RULES) {
       if (ignore.includes(rule.id) || ignore.includes(rule.name)) continue;
-      for (const r of rule.check({ stat, servers, findings: fileFindings, file: t.file }) || []) {
+      for (const r of rule.check({ stat, servers, findings: fileFindings, file: t.file, duplicates }) || []) {
         fileFindings.push({
           ruleId: rule.id,
           rule: rule.name,
@@ -91,13 +96,14 @@ export function audit(opts = {}) {
           message: r.message,
           evidence: r.evidence,
           fix: rule.fix,
-          server: undefined,
+          server: r.server,
           file: t.file,
           pointer: r.pointer || '',
+          line: r.line,
         });
       }
     }
-    for (const f of fileFindings) f.line = locateLine(text, f.pointer);
+    for (const f of fileFindings) f.line ??= locateLine(text, f.pointer);
     findings.push(...fileFindings);
     serverCount += servers.length;
     files.push({ file: t.file, client: t.client || guessClient(t.file), servers: servers.length, error });
