@@ -2,6 +2,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { ALL_RULES } from './rules.js';
 import { ALL_TOOL_RULES } from './tools.js';
+import { LOCK_RULES } from './lock.js';
 
 const useColor = (stream = process.stdout) =>
   !process.env.NO_COLOR && process.env.TERM !== 'dumb' && (process.env.FORCE_COLOR || stream.isTTY);
@@ -47,7 +48,9 @@ export function formatText(report, { color = useColor(), verbose = false } = {})
     }
     lines.push('');
   } else {
-    lines.push(`${c.bold('Scanned')} ${report.toolCount} tool definition${report.toolCount === 1 ? '' : 's'} from ${displayPath(report.files[0].file)}`);
+    const src = report.inspected ? `${report.inspected} live server${report.inspected === 1 ? '' : 's'}${report.failed ? c.red(` (${report.failed} failed)`) : ''}` : displayPath(report.files[0].file);
+    lines.push(`${c.bold('Scanned')} ${report.toolCount} tool definition${report.toolCount === 1 ? '' : 's'} from ${src}`);
+    if (report.lock) lines.push(c.dim(`Lock file: ${displayPath(report.lock.file)}${report.lock.created ? ' (created)' : report.lock.updated ? ' (updated)' : ''}`));
     lines.push('');
   }
 
@@ -125,7 +128,7 @@ const SARIF_LEVEL = { critical: 'error', high: 'error', medium: 'warning', low: 
 const SECURITY_SEVERITY = { critical: '9.5', high: '8.0', medium: '5.5', low: '3.0', info: '1.0' };
 
 export function formatSarif(report, { cwd = process.cwd() } = {}) {
-  const rules = [...ALL_RULES, ...ALL_TOOL_RULES];
+  const rules = [...ALL_RULES, ...ALL_TOOL_RULES, ...LOCK_RULES];
   const used = [...new Set(report.findings.map((f) => f.ruleId))];
   const ruleIndex = new Map(used.map((id, i) => [id, i]));
   const toUri = (file) => {

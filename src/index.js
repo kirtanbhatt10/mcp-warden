@@ -2,12 +2,18 @@ import fs from 'node:fs';
 import { loadConfigFile, locateLine } from './config.js';
 import { discover, expandPaths, guessClient } from './discover.js';
 import { SERVER_RULES, FILE_RULES, ALL_RULES, SEVERITIES, severityRank } from './rules.js';
-import { scanTools, ALL_TOOL_RULES } from './tools.js';
+import { scanTools, extractTools, ALL_TOOL_RULES as BASE_TOOL_RULES } from './tools.js';
+import { checkLock, LOCK_RULES } from './lock.js';
+
+const ALL_TOOL_RULES = [...BASE_TOOL_RULES, ...LOCK_RULES];
 import { parseJsonc } from './parsers/jsonc.js';
 
 export { SEVERITIES, severityRank, ALL_RULES, ALL_TOOL_RULES, scanTools, discover, expandPaths, loadConfigFile };
 export { extractServers, normalizeServer } from './config.js';
 export { detectSecret } from './secrets.js';
+export { inspectStdio, inspectHttp } from './inspect.js';
+export { checkLock, hashTool } from './lock.js';
+export { writeBaseline, applyBaseline, fingerprint, loadSettings } from './baseline.js';
 export { analyzeLaunch } from './packages.js';
 
 export const VERSION = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
@@ -101,14 +107,28 @@ export function audit(opts = {}) {
   return { tool: 'mcp-warden', version: VERSION, kind: 'config', files, serverCount, findings, summary: summarize(findings) };
 }
 
-/** Audit a tools/list dump. */
-export function auditTools(file, { ignore = [] } = {}) {
+/** Audit a tools/list dump (file path or "-" for stdin). */
+export function auditTools(file, opts = {}) {
   const text = file === '-' ? fs.readFileSync(0, 'utf8') : fs.readFileSync(file, 'utf8');
-  const data = parseJsonc(text);
-  const { findings, toolCount } = scanTools(data, file === '-' ? '<stdin>' : file);
+  return auditToolData(parseJsonc(text), { ...opts, source: file === '-' ? '<stdin>' : file });
+}
+
+/**
+ * Audit already-parsed tool definitions.
+ * @param {any} data  tools/list result, {tools}, array, or {server: tools}
+ * @param {{ignore?: string[], source?: string, lock?: string, updateLock?: boolean}} [opts]
+ */
+export function auditToolData(data, { ignore = [], source = '<inline>', lock, updateLock = false } = {}) {
+  const { findings, toolCount } = scanTools(data, source);
+  const meta = {};
+  if (lock) {
+    const res = checkLock(extractTools(data), lock, { update: updateLock, source });
+    findings.push(...res.findings);
+    meta.lock = { file: lock, created: res.created, updated: res.updated };
+  }
   const kept = findings.filter((f) => !ignore.includes(f.ruleId) && !ignore.includes(f.rule));
   kept.sort((a, b) => severityRank(b.severity) - severityRank(a.severity));
-  return { tool: 'mcp-warden', version: VERSION, kind: 'tools', files: [{ file, client: 'tools/list', servers: 0, tools: toolCount }], toolCount, findings: kept, summary: summarize(kept) };
+  return { tool: 'mcp-warden', version: VERSION, kind: 'tools', files: [{ file: source, client: 'tools/list', servers: 0, tools: toolCount }], toolCount, findings: kept, summary: summarize(kept), ...meta };
 }
 
 export function summarize(findings) {

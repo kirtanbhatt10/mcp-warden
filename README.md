@@ -2,63 +2,67 @@
 
 # 🛡️ mcp-warden
 
-**Find the security holes in your AI agent's MCP setup in one command.**
+### Your AI agent runs MCP servers with *your* privileges. Check them before an attacker does.
 
-Audits the MCP server configs of Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Gemini CLI, Codex, Zed, Cline, Roo and more for
-leaked API keys, supply-chain traps, typosquats, malicious packages, container escapes and tool poisoning.
+**mcp-warden** audits the MCP setup of Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Gemini CLI, Codex, Zed, Cline, Roo and more. It finds
+leaked API keys, supply-chain traps, typosquats, known-malicious packages, container escapes, **tool poisoning** and **rug pulls**, offline and in under a second.
 
 [![CI](https://github.com/kirtanbhatt10/mcp-warden/actions/workflows/ci.yml/badge.svg)](https://github.com/kirtanbhatt10/mcp-warden/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/kirtanbhatt10/mcp-warden?color=blueviolet)](https://github.com/kirtanbhatt10/mcp-warden/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 ![Node](https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white)
 ![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
-![Rules](https://img.shields.io/badge/rules-29-blueviolet)
+![Rules](https://img.shields.io/badge/rules-32-blueviolet)
 [![SARIF](https://img.shields.io/badge/output-SARIF%202.1.0-orange)](#-github-code-scanning)
+[![Stars](https://img.shields.io/github/stars/kirtanbhatt10/mcp-warden?style=social)](https://github.com/kirtanbhatt10/mcp-warden/stargazers)
 
 ```bash
 npx github:kirtanbhatt10/mcp-warden
 ```
 
-<img src="docs/demo.svg" alt="mcp-warden scanning a vulnerable Claude Desktop config" width="100%">
+<img src="docs/demo-scan.gif" alt="mcp-warden finding leaked keys, typosquats, privileged containers and curl|sh in a Cursor MCP config" width="100%">
+
+[**Quick start**](#-quick-start) · [**Demos**](#-demos) · [**Rules**](#-what-it-checks) · [**Live inspect**](#-live-inspection--rug-pull-detection) · [**CI / GitHub Action**](#-github-code-scanning) · [**FAQ**](#-faq)
 
 </div>
 
 ---
 
-## Why
+## 🤔 Why
 
-MCP servers run **on your machine, with your privileges**, and are launched automatically every time your AI client starts. Most setup guides tell you to paste something like this into a JSON file:
+MCP servers run **on your machine, with your privileges**, and start automatically every time your AI client launches. Most setup guides tell you to paste something like this into a JSON file:
 
 ```json
 { "command": "npx", "args": ["-y", "some-mcp-server"], "env": { "API_KEY": "sk-live-..." } }
 ```
 
-That single line means: *download whatever version is on npm right now, run it without asking, and hand it a plaintext secret*. In 2025 alone:
+That one line means *download whatever version is on npm right now, run it without asking, and hand it a plaintext secret*. Things that actually happened in 2025:
 
-- **`postmark-mcp`** — the first malicious MCP server found in the wild — silently BCC'd every email its users sent to an attacker.
-- **CVE-2025-6514** — a critical RCE in `mcp-remote`, a proxy with hundreds of thousands of downloads, let a malicious server run commands on the client.
-- **CVE-2025-49596** — the MCP Inspector could be hijacked from a web page for remote code execution.
-- **Tool poisoning** — researchers showed that hidden instructions inside a tool's *description* can make an agent read `~/.ssh` or your `mcp.json` and leak it, while the user sees nothing.
+| | Incident | What mcp-warden does about it |
+|---|---|---|
+| 📧 | **`postmark-mcp`**, the first malicious MCP server found in the wild, silently BCC'd every email to an attacker | `MW019` flags known-malicious packages · `MW002` flags unpinned installs that auto-update into malware |
+| 💥 | **CVE-2025-6514**: RCE in `mcp-remote` (hundreds of thousands of downloads) | `MW019` flags vulnerable versions and tells you the fixed one |
+| 🕸️ | **CVE-2025-49596**: MCP Inspector hijackable from any web page | `MW019` |
+| 🧪 | **Tool poisoning**: hidden instructions in tool descriptions make agents leak `~/.ssh` or `mcp.json` | `TP001`–`TP010` scan what the model actually reads, including invisible Unicode |
+| 🪤 | **Rug pulls**: a server behaves during review, then silently changes its tool descriptions | `--lock` pins every tool definition and `TP011` fires when one changes |
 
-`mcp-warden` checks for all of this **locally, offline, in under a second, with zero dependencies**. Nothing is executed, nothing is uploaded.
+mcp-warden is **read-only, offline and has zero dependencies**. Config scans never execute anything and nothing is uploaded anywhere.
 
-## Quick start
+## 🚀 Quick start
 
 ```bash
-# Audit every MCP config on this machine (auto-discovery)
+# Audit every MCP config on this machine (auto-discovery across 20+ known locations)
 npx github:kirtanbhatt10/mcp-warden
 
 # Audit specific files or whole repos
-npx github:kirtanbhatt10/mcp-warden scan .cursor/mcp.json .vscode/mcp.json
-npx github:kirtanbhatt10/mcp-warden scan . --verbose
+npx github:kirtanbhatt10/mcp-warden scan .cursor/mcp.json .vscode/mcp.json --verbose
+npx github:kirtanbhatt10/mcp-warden scan .
 
-# Scan a tools/list dump for tool poisoning
-npx github:kirtanbhatt10/mcp-warden tools tools.json
-
-# CI-friendly output
-npx github:kirtanbhatt10/mcp-warden scan . --format sarif --output mcp-warden.sarif
+# Connect to a server and scan the tools it exposes (pins them for rug-pull detection)
+npx github:kirtanbhatt10/mcp-warden inspect --lock mcp-tools.lock.json -- npx -y @playwright/mcp@0.0.41
 ```
 
-Or install it globally:
+Install globally if you use it often:
 
 ```bash
 npm install -g github:kirtanbhatt10/mcp-warden
@@ -69,12 +73,36 @@ Try it on the bundled examples:
 
 ```bash
 git clone https://github.com/kirtanbhatt10/mcp-warden && cd mcp-warden
-node bin/mcp-warden.js scan examples/vulnerable     # 28 findings, grade F
-node bin/mcp-warden.js scan examples/safe           # clean, grade A
+node bin/mcp-warden.js scan examples/vulnerable        # 28 findings, grade F
+node bin/mcp-warden.js scan examples/safe              # clean, grade A
 node bin/mcp-warden.js tools examples/tools/poisoned-tools.json
+DEMO_MODE=poisoned node bin/mcp-warden.js inspect -- node examples/servers/demo-server.js
 ```
 
-## What it checks
+## 🎬 Demos
+
+### 1 · Audit a config: secrets, typosquats, privileged Docker, `curl | sh`
+
+https://github.com/user-attachments/assets/e3ca8e7b-30eb-43d7-b0a6-3a3839852f56
+
+### 2 · Live inspection: catch a rug pull the moment a tool description changes
+
+https://github.com/user-attachments/assets/6aa78c01-d768-4727-ad41-efca8682e303
+
+### 3 · CI: adopt with a baseline, fail only on *new* risks, export SARIF
+
+https://github.com/user-attachments/assets/a005b44e-fac9-4f09-9568-569b4ee93993
+
+<details>
+<summary>Videos not playing? GIF versions</summary>
+
+<img src="docs/demo-rugpull.gif" alt="mcp-warden rug-pull detection demo" width="100%">
+
+<img src="docs/demo-ci.gif" alt="mcp-warden CI baseline demo" width="100%">
+
+</details>
+
+## ✅ What it checks
 
 ### Config rules
 
@@ -115,9 +143,17 @@ node bin/mcp-warden.js tools examples/tools/poisoned-tools.json
 | TP009 | `context-smuggling-parameter` | medium | Parameters like `sidenote`, `conversation_history`, `system_prompt` |
 | TP010 | `tool-name-collision` | medium | Same tool name exposed by multiple servers |
 
+### Rug-pull rules (`--lock`)
+
+| ID | Rule | Severity | What it catches |
+|---|---|---|---|
+| TP011 | `tool-definition-changed` | high | A pinned tool's description or schema changed |
+| TP012 | `tool-removed` | info | A pinned tool disappeared |
+| TP013 | `tool-added` | low | A new tool or server showed up that isn't in the lock file yet |
+
 Full details and remediation for every rule: [`docs/rules.md`](docs/rules.md) or `mcp-warden rules`.
 
-## Supported clients
+## 💻 Supported clients
 
 Auto-discovery checks the right paths on **macOS, Linux and Windows** — run `mcp-warden locations` to see them all.
 
@@ -136,21 +172,31 @@ Auto-discovery checks the right paths on **macOS, Linux and Windows** — run `m
 
 JSONC (comments, trailing commas) is handled everywhere.
 
-## Scanning for tool poisoning
+## 🔬 Live inspection & rug-pull detection
 
-Config checks can't see what a server tells the model. Dump a server's tools with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) CLI (or any client) and scan them:
+Config files only tell half the story. What the **model** reads is each tool's name, description and schema, and a server can change those at any time. `mcp-warden inspect` connects to a server, runs the MCP handshake, fetches `tools/list` and scans every tool definition:
 
 ```bash
-# pin versions in real use
-npx @modelcontextprotocol/inspector --cli npx -y some-server@1.2.3 --method tools/list > tools.json
-mcp-warden tools tools.json
+# A local stdio server: everything after -- is the command to launch
+mcp-warden inspect -- npx -y @modelcontextprotocol/server-everything@2025.9.25
+
+# A remote Streamable HTTP server
+mcp-warden inspect --url https://mcp.example.com/mcp -H "Authorization: Bearer $TOKEN"
+
+# Servers straight from your configs (stdio servers need --yes, because they get launched)
+mcp-warden inspect --server github --yes
+mcp-warden inspect --all --yes --lock mcp-tools.lock.json
 ```
 
-Accepts a raw `tools/list` JSON-RPC response, `{ "tools": [...] }`, a bare array, or `{ "serverA": { "tools": [...] }, "serverB": [...] }` (enables cross-server collision checks). Use `-` to read from stdin.
+**Rug-pull protection:** the first run with `--lock` stores a SHA-256 of every tool definition. Every later run compares against it and raises **`TP011`** when a description or schema changes. Review the change, then accept it with `--update-lock`. Commit the lock file and run it on a schedule in CI to catch silent changes.
+
+> ⚠️ `inspect` on a stdio server **runs that server**. Only inspect servers you would run anyway, ideally in a container or VM. `scan` and `tools` never execute anything.
+
+Already have a dump? `mcp-warden tools tools.json` accepts a raw `tools/list` response, `{ "tools": [...] }`, a bare array, or `{ "serverA": {...}, "serverB": [...] }` (which also enables cross-server name-collision checks). Use `-` for stdin.
 
 ## 🔍 GitHub code scanning
 
-Fail pull requests that add risky MCP configs, and see findings inline in the **Security** tab:
+Fail pull requests that add risky MCP configs and see findings inline in the **Security** tab:
 
 ```yaml
 # .github/workflows/mcp-warden.yml
@@ -164,13 +210,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: kirtanbhatt10/mcp-warden@v1.0.0
+      - uses: kirtanbhatt10/mcp-warden@v1.1.0
         with:
           path: .
           fail-on: high
+          # baseline: .mcp-warden-baseline.json   # only fail on new findings
 ```
 
-Or without the action:
+The action also writes a Markdown summary to the job page. Prefer plain commands?
 
 ```yaml
       - uses: actions/setup-node@v4
@@ -181,15 +228,48 @@ Or without the action:
         with: { sarif_file: mcp-warden.sarif }
 ```
 
-Need a PR comment instead? `--format markdown` produces a ready-to-post table.
+### Baselines: adopt it today, fix things gradually
 
-## CLI reference
+```bash
+mcp-warden scan . --write-baseline .mcp-warden-baseline.json   # accept what exists today
+mcp-warden scan . --baseline .mcp-warden-baseline.json          # only NEW findings fail
+```
+
+### pre-commit
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/kirtanbhatt10/mcp-warden
+    rev: v1.1.0
+    hooks:
+      - id: mcp-warden
+```
+
+### Project settings: `.mcp-warden.json`
+
+Searched upward from the working directory. CLI flags always win.
+
+```json
+{
+  "paths": [".cursor/mcp.json", ".vscode/mcp.json"],
+  "ignore": ["MW016"],
+  "failOn": "medium",
+  "minSeverity": "low",
+  "baseline": ".mcp-warden-baseline.json"
+}
+```
+
+## 📖 CLI reference
 
 ```
-mcp-warden [scan] [paths...]     Audit MCP configs (auto-discovers when no path is given)
-mcp-warden tools <file|->        Scan a tools/list JSON dump for tool poisoning
-mcp-warden rules                 List all rules
-mcp-warden locations             Show every config path that is checked
+mcp-warden [scan] [paths...]          Audit MCP configs (auto-discovers when no path is given)
+mcp-warden tools <file|->             Scan a tools/list JSON dump for tool poisoning
+mcp-warden inspect -- <cmd> [args]    Launch a stdio server, fetch its tools and scan them
+mcp-warden inspect --url <url>        Fetch tools from a remote (Streamable HTTP) server
+mcp-warden inspect --server <name>    Inspect a server from your configs (--all for every one)
+mcp-warden rules                      List all rules
+mcp-warden locations                  Show every config path that is checked
 
 -f, --format <fmt>       text (default) | json | sarif | markdown
 -o, --output <file>      Write the report to a file
@@ -197,51 +277,92 @@ mcp-warden locations             Show every config path that is checked
     --fail-on <s>        Exit 1 at or above this severity (default: high, "none" disables)
 -i, --ignore <ids>       Skip rules, e.g. -i MW002,typosquat
     --no-discover        Only scan the given paths
+    --baseline <file>    Suppress findings recorded in a baseline
+    --write-baseline <f> Record current findings as accepted
+    --lock <file>        Pin tool definitions (rug-pull detection)
+    --update-lock        Accept current tool definitions
+    --save <file>        Save fetched tools/list JSON (inspect)
+-H, --header <h>         Extra HTTP header for --url
+-y, --yes                Confirm launching stdio servers from configs
 -v, --verbose            Show remediation advice
 ```
 
-Exit codes: `0` clean · `1` findings at/above `--fail-on` · `2` usage error.
+Exit codes: `0` clean · `1` findings at or above `--fail-on` · `2` usage or runtime error.
 
-## Use as a library
+## 🧩 Use as a library
 
 ```js
-import { audit, auditServers, extractServers, scanTools } from 'mcp-warden';
+import { audit, auditServers, extractServers, auditToolData, inspectStdio } from 'mcp-warden';
 
 const report = audit({ paths: ['./.cursor/mcp.json'], discover: false });
 console.log(report.summary); // { critical, high, medium, low, info, total, score, grade }
 
-const findings = auditServers(extractServers({ mcpServers: { x: { command: 'npx', args: ['-y', 'pkg'] } } }));
+const { tools } = await inspectStdio('npx', ['-y', '@playwright/mcp@0.0.41']);
+const toolReport = auditToolData({ playwright: { tools } }, { lock: 'mcp-tools.lock.json' });
 ```
 
-## Security score
+## 🏅 Security score
 
-Every report gets a 0–100 score and an A–F grade (critical −30, high −12, medium −4, low −1; any critical caps the grade at D, two or more is an F). Put it in your README, challenge your team, fix until you get an **A**.
+Every report gets a 0–100 score and an A–F grade (critical −30, high −12, medium −4, low −1; any critical caps the grade at D, two or more give an F). Put it in your README, challenge your team, and keep fixing until you get an **A**.
 
-## How it stays safe
+## ❓ FAQ
 
-- **Read-only & offline.** It never launches servers, never touches the network, never modifies files.
-- **Secrets are redacted** in every output format (`sk-pro…(56 chars)`).
-- **Zero dependencies** — nothing to audit but ~2k lines of plain JavaScript.
+<details>
+<summary><b>Does mcp-warden send my config or secrets anywhere?</b></summary>
 
-## Roadmap
+No. `scan` and `tools` are 100% offline and read-only. Secrets are redacted in every output format (`sk-pro…(56 chars)`). Only `inspect` talks to the network, and only to the server you point it at.
+</details>
 
-- [ ] Live mode: connect to stdio/HTTP servers and fetch `tools/list` automatically (sandboxed)
-- [ ] Rug-pull detection: hash tool definitions and alert when they change
-- [ ] Pre-commit hook & VS Code extension
-- [ ] More known-vulnerable packages via the OSV database
+<details>
+<summary><b>It flagged <code>npx -y some-server</code>. Is that really a problem?</b></summary>
 
-Ideas and rules are very welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Yes. Without a version, every launch of your AI client installs whatever is newest on npm, with no confirmation. One compromised maintainer account is enough to run malware on every machine using that config, which is how `postmark-mcp` turned malicious after 15 clean versions. Pin `pkg@1.2.3` and bump deliberately.
+</details>
 
-## Related
+<details>
+<summary><b>How is this different from a generic secret scanner?</b></summary>
 
-- [**Injektor**](https://github.com/kirtanbhatt10/Injektor) — probe your LLM apps with controlled prompt-injection and jailbreak attacks. `mcp-warden` secures the agent's *tools*; Injektor tests the *model*.
+Secret scanners only see strings. mcp-warden understands MCP: how each client stores servers, how `npx`/`uvx`/`docker` resolve packages, which reference servers are archived, which packages are typosquats, which Docker flags escape the sandbox, what tool poisoning looks like, and when a server's tools change after you approved them.
+</details>
 
-## License
+<details>
+<summary><b>I get a false positive. How do I silence it?</b></summary>
+
+Use `--ignore MW0xx`, add it to `ignore` in `.mcp-warden.json`, or record it in a baseline. Please also [open an issue](https://github.com/kirtanbhatt10/mcp-warden/issues/new/choose) with a minimal config so the rule can be improved.
+</details>
+
+<details>
+<summary><b>Windows?</b></summary>
+
+Yes. CI runs on Windows, macOS and Linux with Node 20, 22 and 24, and auto-discovery knows the `%APPDATA%` locations. The documented `cmd /c npx …` pattern is understood and not flagged as shell execution.
+</details>
+
+## 🗺️ Roadmap
+
+- [x] Static config audit for 12+ clients
+- [x] Tool-poisoning rules incl. Unicode tag smuggling
+- [x] Live `inspect` over stdio and Streamable HTTP
+- [x] Rug-pull detection with lock files
+- [x] Baselines, project settings, pre-commit hook, GitHub Action
+- [ ] Sandboxed inspect (run stdio servers inside Docker automatically)
+- [ ] Known-vulnerable package feed from the OSV database
+- [ ] VS Code extension with inline diagnostics
+- [ ] Prompts/resources scanning (not just tools)
+
+Ideas and new rules are very welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Good first issues: new token formats, new client config locations, new malicious-package entries.
+
+## 🔗 Related
+
+- [**Injektor**](https://github.com/kirtanbhatt10/Injektor): probe your LLM apps with controlled prompt-injection and jailbreak attacks. mcp-warden secures the agent's *tools*; Injektor tests the *model*.
+
+## 📄 License
 
 [MIT](LICENSE) © Kirtan Bhatt
 
 <div align="center">
 
-**If mcp-warden found something in your setup, consider giving it a ⭐ — it helps other people find it before attackers find them.**
+**If mcp-warden found something in your setup, please ⭐ the repo. It helps other people find it before attackers find them.**
+
+[![Star History Chart](https://api.star-history.com/svg?repos=kirtanbhatt10/mcp-warden&type=Date)](https://star-history.com/#kirtanbhatt10/mcp-warden&Date)
 
 </div>

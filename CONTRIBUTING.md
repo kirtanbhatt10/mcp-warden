@@ -23,6 +23,10 @@ There are **no dependencies** and we'd like to keep it that way.
 | `src/data.js` | Popular, archived and known-vulnerable package lists |
 | `src/discover.js` | Client config locations per OS |
 | `src/report.js` | text / JSON / SARIF / Markdown output |
+| `src/inspect.js` | Live MCP client (stdio + Streamable HTTP) used by `inspect` |
+| `src/lock.js` | Tool-definition hashing and rug-pull lock files |
+| `src/baseline.js` | Baselines and `.mcp-warden.json` settings |
+| `examples/servers/demo-server.js` | Harmless MCP server with benign / poisoned / rug-pull modes for tests |
 
 ## Adding a rule
 

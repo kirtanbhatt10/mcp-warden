@@ -21,6 +21,10 @@ inputs:
     description: 'Comma-separated rule IDs or names to skip'
     required: false
     default: ''
+  baseline:
+    description: 'Baseline file of accepted findings (created with --write-baseline)'
+    required: false
+    default: ''
   sarif:
     description: 'Upload results to GitHub code scanning (needs security-events: write)'
     required: false
@@ -40,10 +44,12 @@ runs:
         MW_FAIL_ON: ${{ inputs.fail-on }}
         MW_MIN: ${{ inputs.min-severity }}
         MW_IGNORE: ${{ inputs.ignore }}
+        MW_BASELINE: ${{ inputs.baseline }}
       run: |
         set +e
         args=(--no-discover --min-severity "$MW_MIN" --fail-on none)
         if [ -n "$MW_IGNORE" ]; then args+=(--ignore "$MW_IGNORE"); fi
+        if [ -n "$MW_BASELINE" ]; then args+=(--baseline "$MW_BASELINE"); fi
         read -r -a paths <<< "$MW_PATH"
         node "$GITHUB_ACTION_PATH/bin/mcp-warden.js" scan "${paths[@]}" "${args[@]}" --color
         node "$GITHUB_ACTION_PATH/bin/mcp-warden.js" scan "${paths[@]}" "${args[@]}" --format markdown >> "$GITHUB_STEP_SUMMARY"
@@ -63,8 +69,10 @@ runs:
         MW_PATH: ${{ inputs.path }}
         MW_FAIL_ON: ${{ inputs.fail-on }}
         MW_IGNORE: ${{ inputs.ignore }}
+        MW_BASELINE: ${{ inputs.baseline }}
       run: |
         args=(--no-discover --fail-on "$MW_FAIL_ON" --format json)
         if [ -n "$MW_IGNORE" ]; then args+=(--ignore "$MW_IGNORE"); fi
+        if [ -n "$MW_BASELINE" ]; then args+=(--baseline "$MW_BASELINE"); fi
         read -r -a paths <<< "$MW_PATH"
         node "$GITHUB_ACTION_PATH/bin/mcp-warden.js" scan "${paths[@]}" "${args[@]}" > /dev/null

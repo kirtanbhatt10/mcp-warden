@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.0 — 2026-10-14
+
+### Added
+- **`mcp-warden inspect`** — connect to a live MCP server (stdio command, `--url` Streamable HTTP/SSE, or `--server`/`--all` from your configs), fetch `tools/list` and run every tool-poisoning rule on what the model actually sees.
+- **Rug-pull detection** — `--lock <file>` pins a SHA-256 of every tool definition; later runs flag changed (TP011), removed (TP012) and new (TP013) tools. `--update-lock` accepts reviewed changes.
+- **Baselines** — `--write-baseline` / `--baseline` so teams can adopt mcp-warden in CI and only fail on *new* findings.
+- **Project settings** — `.mcp-warden.json` (`paths`, `ignore`, `failOn`, `minSeverity`, `baseline`, `format`), searched upwards from the working directory.
+- **pre-commit hook** (`.pre-commit-hooks.yaml`).
+- `baseline` input for the GitHub Action.
+- `examples/servers/demo-server.js` — a harmless MCP server with benign, poisoned and rug-pull modes for demos and tests.
+- Demo recordings in `docs/`.
+
 ## 1.0.0 — 2026-10-14
 
 First public release.

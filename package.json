@@ -1,6 +1,6 @@
 {
   "name": "mcp-warden",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Security auditor for MCP (Model Context Protocol) server configs. Finds leaked API keys, supply-chain risks, typosquats, dangerous Docker flags and tool poisoning across Claude, Cursor, VS Code, Windsurf, Gemini CLI, Codex and more. Zero dependencies.",
   "type": "module",
   "bin": {

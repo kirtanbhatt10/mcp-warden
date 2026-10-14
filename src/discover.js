@@ -111,18 +111,21 @@ function walk(dir, depth, maxDepth, acc) {
 function isCandidate(file) {
   const base = path.basename(file);
   if (!CANDIDATE_NAMES.has(base)) {
-    return /mcp.*\.json$/i.test(base);
+    if (!/mcp.*\.json$/i.test(base) || /(baseline|lock|sarif|report|tools)/i.test(base)) return false;
+    return mentionsMcp(file);
   }
   // generic names: only when they live in a known client directory or mention MCP
-  if (base === 'settings.json' || base === 'config.toml') {
-    try {
-      const text = fs.readFileSync(file, 'utf8');
-      return /mcpServers|mcp_servers|context_servers|"mcp"\s*:/.test(text);
-    } catch {
-      return false;
-    }
-  }
+  if (base === 'settings.json' || base === 'config.toml') return mentionsMcp(file);
   return true;
+}
+
+function mentionsMcp(file) {
+  try {
+    const text = fs.readFileSync(file, 'utf8');
+    return /mcpServers|mcp_servers|context_servers|"mcp"\s*:|"servers"\s*:/.test(text);
+  } catch {
+    return false;
+  }
 }
 
 export function guessClient(file) {

@@ -278,3 +278,15 @@ describe('CLI', () => {
     assert.equal(new Set(r.map((x) => x.id)).size, r.length);
   });
 });
+
+describe('directory walk hygiene', () => {
+  test('ignores baselines, lock files and unrelated *mcp*.json files', () => {
+    const dir = tmpdir();
+    fs.writeFileSync(path.join(dir, '.mcp-warden-baseline.json'), '{"findings":[]}');
+    fs.writeFileSync(path.join(dir, 'mcp-tools.lock.json'), '{"servers":{}}');
+    fs.writeFileSync(path.join(dir, 'my-mcp-notes.json'), '{"hello":1}');
+    fs.writeFileSync(path.join(dir, 'team-mcp.json'), '{"mcpServers":{"a":{"command":"node"}}}');
+    const report = audit({ paths: [dir], discover: false });
+    assert.deepEqual(report.files.map((f) => path.basename(f.file)), ['team-mcp.json']);
+  });
+});

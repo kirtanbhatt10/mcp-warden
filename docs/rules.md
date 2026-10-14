@@ -274,3 +274,29 @@ Tool requests conversation or system context as a parameter.
 **`tool-name-collision`** · default severity: **medium**
 
 Same tool name exposed by multiple servers.
+
+### TP011
+
+**`tool-definition-changed`** · default severity: **high**
+
+Tool definition changed since it was pinned (possible rug pull).
+
+A server changed the description or schema of a tool after you pinned it with --lock. Malicious servers can behave well during review and change their tool descriptions later.
+
+**How to fix:** Diff the definition, then run with --update-lock once reviewed.
+
+### TP012
+
+**`tool-removed`** · default severity: **info**
+
+Pinned tool no longer exposed.
+
+**How to fix:** Run with --update-lock to accept the change.
+
+### TP013
+
+**`tool-added`** · default severity: **low**
+
+New server or tool not present in the lock file.
+
+**How to fix:** Review the new tool, then run with --update-lock to pin it.
