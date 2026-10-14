@@ -1,0 +1,54 @@
+{
+  "name": "mcp-warden",
+  "version": "1.0.0",
+  "description": "Security auditor for MCP (Model Context Protocol) server configs. Finds leaked API keys, supply-chain risks, typosquats, dangerous Docker flags and tool poisoning across Claude, Cursor, VS Code, Windsurf, Gemini CLI, Codex and more. Zero dependencies.",
+  "type": "module",
+  "bin": {
+    "mcp-warden": "bin/mcp-warden.js"
+  },
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "scan": "node bin/mcp-warden.js",
+    "demo": "node bin/mcp-warden.js scan examples/vulnerable"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "security",
+    "ai-security",
+    "llm-security",
+    "claude",
+    "cursor",
+    "vscode",
+    "windsurf",
+    "secrets",
+    "supply-chain",
+    "sarif",
+    "cli",
+    "tool-poisoning",
+    "prompt-injection"
+  ],
+  "author": "Kirtan Bhatt (https://github.com/kirtanbhatt10)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kirtanbhatt10/mcp-warden.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kirtanbhatt10/mcp-warden/issues"
+  },
+  "homepage": "https://github.com/kirtanbhatt10/mcp-warden#readme"
+}

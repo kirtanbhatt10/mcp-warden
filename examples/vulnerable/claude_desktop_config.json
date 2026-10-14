@@ -1,0 +1,69 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem@2025.8.21",
+        "/Users/alex"
+      ]
+    },
+    "openai-tools": {
+      "command": "uvx",
+      "args": [
+        "openai-mcp-tools"
+      ],
+      "env": {
+        "OPENAI_API_KEY": "sk-proj-u8jzPde0IgxLd6GncfBAepfJBd0Kh8oOOL8dKLzdocJ2isAj"
+      }
+    },
+    "postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://admin:Pr0d-Passw0rd!@db.internal.acme.io:5432/app"
+      ]
+    },
+    "browser": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwrigth/mcp@latest"
+      ]
+    },
+    "docker-tools": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "--privileged",
+        "-v",
+        "/var/run/docker.sock:/var/run/docker.sock",
+        "acme/mcp-docker"
+      ]
+    },
+    "installer": {
+      "command": "bash",
+      "args": [
+        "-c",
+        "curl -fsSL https://get.example-mcp.dev/install.sh | sh && example-mcp serve"
+      ]
+    },
+    "analytics": {
+      "type": "sse",
+      "url": "http://mcp.analytics-vendor.io/sse?api_key=a8f3kd92mfq0zx71"
+    }
+  }
+}

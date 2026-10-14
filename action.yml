@@ -1,0 +1,70 @@
+name: 'mcp-warden'
+description: 'Audit MCP server configs for leaked secrets, supply-chain risks, typosquats and tool poisoning'
+author: 'Kirtan Bhatt'
+branding:
+  icon: 'shield'
+  color: 'purple'
+inputs:
+  path:
+    description: 'Files or directories to scan (space separated)'
+    required: false
+    default: '.'
+  fail-on:
+    description: 'Fail the job at or above this severity (info|low|medium|high|critical|none)'
+    required: false
+    default: 'high'
+  min-severity:
+    description: 'Hide findings below this severity'
+    required: false
+    default: 'low'
+  ignore:
+    description: 'Comma-separated rule IDs or names to skip'
+    required: false
+    default: ''
+  sarif:
+    description: 'Upload results to GitHub code scanning (needs security-events: write)'
+    required: false
+    default: 'true'
+outputs:
+  sarif-file:
+    description: 'Path of the generated SARIF report'
+    value: ${{ steps.scan.outputs.sarif-file }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Run mcp-warden
+      id: scan
+      shell: bash
+      env:
+        MW_PATH: ${{ inputs.path }}
+        MW_FAIL_ON: ${{ inputs.fail-on }}
+        MW_MIN: ${{ inputs.min-severity }}
+        MW_IGNORE: ${{ inputs.ignore }}
+      run: |
+        set +e
+        args=(--no-discover --min-severity "$MW_MIN" --fail-on none)
+        if [ -n "$MW_IGNORE" ]; then args+=(--ignore "$MW_IGNORE"); fi
+        read -r -a paths <<< "$MW_PATH"
+        node "$GITHUB_ACTION_PATH/bin/mcp-warden.js" scan "${paths[@]}" "${args[@]}" --color
+        node "$GITHUB_ACTION_PATH/bin/mcp-warden.js" scan "${paths[@]}" "${args[@]}" --format markdown >> "$GITHUB_STEP_SUMMARY"
+        node "$GITHUB_ACTION_PATH/bin/mcp-warden.js" scan "${paths[@]}" "${args[@]}" --format sarif --output mcp-warden.sarif
+        echo "sarif-file=mcp-warden.sarif" >> "$GITHUB_OUTPUT"
+        exit 0
+    - name: Upload SARIF
+      if: ${{ inputs.sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: mcp-warden.sarif
+        category: mcp-warden
+    - name: Enforce threshold
+      if: ${{ inputs.fail-on != 'none' }}
+      shell: bash
+      env:
+        MW_PATH: ${{ inputs.path }}
+        MW_FAIL_ON: ${{ inputs.fail-on }}
+        MW_IGNORE: ${{ inputs.ignore }}
+      run: |
+        args=(--no-discover --fail-on "$MW_FAIL_ON" --format json)
+        if [ -n "$MW_IGNORE" ]; then args+=(--ignore "$MW_IGNORE"); fi
+        read -r -a paths <<< "$MW_PATH"
+        node "$GITHUB_ACTION_PATH/bin/mcp-warden.js" scan "${paths[@]}" "${args[@]}" > /dev/null

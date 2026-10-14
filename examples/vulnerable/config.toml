@@ -1,0 +1,11 @@
+# Codex CLI config
+model = "gpt-5"
+
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+
+[mcp_servers.everything]
+command = "sudo"
+args = ["npx", "-y", "@modelcontextprotocol/server-everything@2025.9.25", "/"]
+env = { DEBUG = "1" }
