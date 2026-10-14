@@ -5,6 +5,7 @@ import {
   ALL_RULES, ALL_TOOL_RULES, inspectStdio, inspectHttp, writeBaseline, applyBaseline, loadSettings,
   expandPaths, discover, loadConfigFile,
 } from '../src/index.js';
+import { safeMultiline } from '../src/sanitize.js';
 import { knownLocations } from '../src/discover.js';
 import { format, displayPath } from '../src/report.js';
 
@@ -131,7 +132,7 @@ function emit(text, opts) {
   }
 }
 
-const note = (msg) => process.stderr.write(`mcp-warden: ${msg}\n`);
+const note = (msg) => process.stderr.write(`mcp-warden: ${safeMultiline(msg)}\n`);
 
 /** Resolve which servers `inspect` should talk to. */
 function inspectTargets(opts) {

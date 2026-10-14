@@ -3,6 +3,9 @@ import os from 'node:os';
 import { ALL_RULES } from './rules.js';
 import { ALL_TOOL_RULES } from './tools.js';
 import { LOCK_RULES } from './lock.js';
+import { safeInline as S, mdCell, mdCode } from './sanitize.js';
+import { pathToFileURL } from 'node:url';
+import fs from 'node:fs';
 
 const useColor = (stream = process.stdout) =>
   !process.env.NO_COLOR && process.env.TERM !== 'dumb' && (process.env.FORCE_COLOR || stream.isTTY);
@@ -43,14 +46,14 @@ export function formatText(report, { color = useColor(), verbose = false } = {})
     }
     lines.push(c.bold('Scanned'));
     for (const f of report.files) {
-      const meta = f.error ? c.red(f.error) : c.dim(`${f.servers} server${f.servers === 1 ? '' : 's'}`);
-      lines.push(`  ${c.cyan('•')} ${f.client.padEnd(22)} ${displayPath(f.file)}  ${meta}`);
+      const meta = f.error ? c.red(S(f.error)) : c.dim(`${f.servers} server${f.servers === 1 ? '' : 's'}`);
+      lines.push(`  ${c.cyan('•')} ${S(f.client).padEnd(22)} ${S(displayPath(f.file))}  ${meta}`);
     }
     lines.push('');
   } else {
-    const src = report.inspected ? `${report.inspected} live server${report.inspected === 1 ? '' : 's'}${report.failed ? c.red(` (${report.failed} failed)`) : ''}` : displayPath(report.files[0].file);
+    const src = report.inspected ? `${report.inspected} live server${report.inspected === 1 ? '' : 's'}${report.failed ? c.red(` (${report.failed} failed)`) : ''}` : S(displayPath(report.files[0].file));
     lines.push(`${c.bold('Scanned')} ${report.toolCount} tool definition${report.toolCount === 1 ? '' : 's'} from ${src}`);
-    if (report.lock) lines.push(c.dim(`Lock file: ${displayPath(report.lock.file)}${report.lock.created ? ' (created)' : report.lock.updated ? ' (updated)' : ''}`));
+    if (report.lock) lines.push(c.dim(`Lock file: ${S(displayPath(report.lock.file))}${report.lock.created ? ' (created)' : report.lock.updated ? ' (updated)' : ''}`));
     lines.push('');
   }
 
@@ -64,14 +67,14 @@ export function formatText(report, { color = useColor(), verbose = false } = {})
       byFile.get(f.file).push(f);
     }
     for (const [file, list] of byFile) {
-      lines.push(c.bold(c.cyan(displayPath(file))));
+      lines.push(c.bold(c.cyan(S(displayPath(file)))));
       for (const f of list) {
         const sev = sevColor[f.severity](SEV_LABEL[f.severity].padEnd(8));
         const where = f.line && f.line > 1 ? c.dim(`:${f.line}`) : '';
-        lines.push(`  ${sev} ${c.bold(f.message)} ${c.dim(`[${f.ruleId} ${f.rule}]`)}`);
+        lines.push(`  ${sev} ${c.bold(S(f.message))} ${c.dim(`[${f.ruleId} ${f.rule}]`)}`);
         const meta = [];
-        if (f.server) meta.push(`${report.kind === 'tools' ? 'tool' : 'server'} ${c.bold(f.server)}${where}`);
-        if (f.evidence) meta.push(`${c.dim('evidence')} ${f.evidence}`);
+        if (f.server) meta.push(`${report.kind === 'tools' ? 'tool' : 'server'} ${c.bold(S(f.server, 120))}${where}`);
+        if (f.evidence) meta.push(`${c.dim('evidence')} ${S(f.evidence, 200)}`);
         if (meta.length) lines.push(`           ${meta.join(c.dim('  ·  '))}`);
         if (verbose && f.fix) lines.push(`           ${c.green('fix:')} ${f.fix}`);
       }
@@ -108,9 +111,8 @@ export function formatMarkdown(report) {
   }
   out.push('| Severity | Rule | Server | Finding | Location |');
   out.push('|---|---|---|---|---|');
-  const esc = (x) => String(x ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
   for (const f of report.findings) {
-    out.push(`| ${emoji[f.severity]} ${f.severity} | \`${f.ruleId}\` ${f.rule} | ${esc(f.server || '—')} | ${esc(f.message)}${f.evidence ? `<br><sub>\`${esc(f.evidence)}\`</sub>` : ''} | \`${esc(displayPath(f.file))}:${f.line || 1}\` |`);
+    out.push(`| ${emoji[f.severity]} ${f.severity} | \`${f.ruleId}\` ${f.rule} | ${f.server ? mdCell(f.server, 120) : '—'} | ${mdCell(f.message)}${f.evidence ? `<br><sub><code>${mdCode(f.evidence, 200)}</code></sub>` : ''} | <code>${mdCode(displayPath(f.file), 200)}:${f.line || 1}</code> |`);
   }
   out.push('');
   out.push('<details><summary>How to fix</summary>\n');
@@ -132,9 +134,13 @@ export function formatSarif(report, { cwd = process.cwd() } = {}) {
   const used = [...new Set(report.findings.map((f) => f.ruleId))];
   const ruleIndex = new Map(used.map((id, i) => [id, i]));
   const toUri = (file) => {
-    if (!file || file.startsWith('<')) return 'stdin';
-    const rel = path.relative(cwd, file);
-    return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel.split(path.sep).join('/') : `file://${file.split(path.sep).join('/')}`;
+    if (!file || file.startsWith('<') || !path.isAbsolute(file) && !fs.existsSync(file)) {
+      return encodeURI(String(file || 'stdin').replace(/[<>]/g, '').replace(/\s+/g, '-') || 'stdin');
+    }
+    const abs = path.resolve(cwd, file);
+    const rel = path.relative(cwd, abs);
+    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) return encodeURI(rel.split(path.sep).join('/'));
+    return pathToFileURL(abs).href;
   };
   return JSON.stringify(
     {

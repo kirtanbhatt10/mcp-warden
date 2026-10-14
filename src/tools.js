@@ -42,16 +42,19 @@ export const TOOL_RULES = [
     id: 'TP004',
     name: 'invisible-characters',
     severity: 'high',
-    title: 'Tool metadata contains invisible or bidirectional Unicode',
-    fix: 'Invisible characters can carry instructions humans cannot see in the UI. Strip them or remove the server.',
+    title: 'Tool metadata contains invisible, control or bidirectional characters',
+    fix: 'Invisible characters and terminal escape sequences can carry instructions humans cannot see, or rewrite what your terminal shows. Strip them or remove the server.',
     test(text) {
       // zero-width, word joiner, BOM, bidi controls, Unicode tag characters
-      const re = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]|[\u{E0000}-\u{E007F}]/u;
+      const re = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]|[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]|[\u{E0000}-\u{E007F}]/u;
       const m = re.exec(text);
       if (!m) return null;
-      const cp = m[0].codePointAt(0).toString(16).toUpperCase().padStart(4, '0');
+      const cp = m[0].codePointAt(0);
+      const label = `U+${cp.toString(16).toUpperCase().padStart(4, '0')}`;
       const tags = decodeTagChars(text);
-      return tags ? `U+${cp} … decoded hidden text: "${tags.slice(0, 80)}"` : `U+${cp} at position ${m.index}`;
+      if (tags) return `${label} … decoded hidden text: "${tags.slice(0, 80)}"`;
+      if (cp === 0x1b) return `${label} (ANSI escape sequence) at position ${m.index}`;
+      return `${label} at position ${m.index}`;
     },
   },
   {
