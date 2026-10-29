@@ -223,7 +223,7 @@ The action also writes a Markdown summary to the job page. Prefer plain commands
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npx -y github:kirtanbhatt10/mcp-warden scan . --no-discover --format sarif --output mcp-warden.sarif
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@v4
         if: always()
         with: { sarif_file: mcp-warden.sarif }
 ```
